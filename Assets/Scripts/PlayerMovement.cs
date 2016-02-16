@@ -31,7 +31,7 @@ public class PlayerMovement : MonoBehaviour
             currRigidbody.AddForce(new Vector2(movementSpeed, 0));
         }
 
-        Debug.Log(currRigidbody.velocity.magnitude);
+        //Debug.Log(currRigidbody.velocity.magnitude);
 
         // Restrict the player's max speed
         if (currRigidbody.velocity.magnitude > maxSpeed)
