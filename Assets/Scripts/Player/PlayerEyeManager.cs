@@ -12,11 +12,6 @@ public class PlayerEyeManager : MonoBehaviour
 
     // Current camera
     public Camera currCamera;
-
-	void Start()
-    {
-	
-	}
 	
 	void Update()
     {

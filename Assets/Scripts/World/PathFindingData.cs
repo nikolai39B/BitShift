@@ -142,12 +142,38 @@ public class PathNode
         get { return GetNodeInParentPath(1); }
     }
 
-    //------//
-    // Data //
-    //------//
+    //----------//
+    // Location //
+    //----------//
+    private void UpdateReferenceInParentWorld(int oldRow, int oldCol, int newRow, int newCol)
+    {
+
+    }
+    private int _worldRow;
+    public int WorldRow
+    {
+        get { return _worldRow; }
+        set
+        {
+            UpdateReferenceInParentWorld(_worldRow, _worldCol, value, _worldCol);
+            _worldRow = value;
+        }
+    }
+    private int _worldCol;
+    public int WorldCol
+    {
+        get { return _worldCol; }
+        set
+        {
+            UpdateReferenceInParentWorld(_worldRow, _worldCol, _worldRow, value);
+            _worldCol = value;
+        }
+    }
+
+    //-------------//
+    // Parent Path //
+    //-------------//
     public Path ParentPath { get; set; }
-    public int WorldRow { get; set; }
-    public int WorldCol { get; set; }
 }
 
 public class Path
@@ -163,9 +189,9 @@ public class Path
         ParentWorld = parentWorld;
     }
 
-    //------//
-    // Data //
-    //------//
+    //------------------------------//
+    // Child Nodes and Parent World //
+    //------------------------------//
     public List<PathNode> ChildNodes { get; set; }
     public World ParentWorld { get; set; }
 }
@@ -181,38 +207,41 @@ public class World
         ChildPaths = childPaths;
     }
 
-    //-------//
-    // Nodes //
-    //-------//
-    /// <summary>
-    /// Gets the first node found at the given location.
-    /// </summary>
-    /// <param name="row">The row of the node to get.</param>
-    /// <param name="col">The col of the node to get.</param>
-    /// <returns>The first node found at the given location.</returns>
-    public PathNode GetNodeAtLocation(int row, int col)
+    //-------------//
+    // Child Nodes //
+    //-------------//
+    public void AddPathNodeToWorld(int row, int col, PathNode node)
     {
-        return GetNodesAtLocation(row, col).FirstOrDefault();
+        // Define our dictionary key
+        Tuple<int, int> rowAndCol = new Tuple<int, int>(row, col);
+
+        // If our dictionary already has an entry for this row and col and does not already contain
+        // this node, add the node
+        if (ChildNodes.ContainsKey(rowAndCol) && !ChildNodes[rowAndCol].Contains(node))
+        {
+            ChildNodes[rowAndCol].Add(node);
+        }
+
+        // Otherwise, create a new entry and add the node
+        else
+        {
+            ChildNodes[rowAndCol] = new List<PathNode>();
+            ChildNodes[rowAndCol].Add(node);
+        }
     }
 
-    /// <summary>
-    /// Gets all nodes found at the given location.
-    /// </summary>
-    /// <param name="row">The row of the nodes to get.</param>
-    /// <param name="col">The col of the nodes to get.</param>
-    /// <returns>All nodes found at the given location.</returns>
-    public IEnumerable<PathNode> GetNodesAtLocation(int row, int col)
+    public void RemovePathNodeFromWorld(int row, int col, PathNode node)
     {
-        return from path in ChildPaths
-               from node in path.ChildNodes
-               where node.WorldRow == row && node.WorldCol == col
-               select node;
+        // TODO: finish implementation
     }
 
-    //------//
-    // Data //
-    //------//
-    List<Path> ChildPaths { get; set; }
+    private Dictionary<Tuple<int, int>, List<PathNode>> ChildNodes;
+
+
+    //-------------//
+    // Child Paths //
+    //-------------//
+    public List<Path> ChildPaths { get; set; }
 }
 
 public class PathFindingOptions
@@ -223,17 +252,41 @@ public class PathFindingOptions
     /// </summary>
     /// <param name="numRows">The number of rows in the world.</param>
     /// <param name="numCols">The number of columns in the world.</param>
+    /// <param name="startRow">The starting row for the paths.</param>
+    /// <param name="startCol">The starting column for the paths.</param>
     /// <param name="endingRow">The ending row for the paths.</param>
     /// <param name="endingCol">The ending column for the paths.</param>
     /// <param name="maxNumberOfPaths">The maximum number of paths to generate.</param>
     /// <param name="allowIntersection">Whether or not to allow paths to intersect.</param>
-    /// <exception cref="ArgumentException">Thrown if endingRow and endingCol are both null.</exception>
-    public PathFindingOptions(int numRows, int numCols, Nullable<int> endingRow = null, Nullable<int> endingCol = null, int maxNumberOfPaths = 1, bool allowIntersection = false)
+    /// <exception cref="ArgumentException">Thrown if some of the provided arguments are invalid.</exception>
+    public PathFindingOptions(int numRows, int numCols, int startRow, int startCol, Nullable<int> endingRow = null, Nullable<int> endingCol = null, int maxNumberOfPaths = 1, bool allowIntersection = false)
     {
         // Ensure we have a valid ending row / col
         if (endingRow == null && endingCol == null)
         {
             throw new ArgumentException("The arguments endingRow and endingCol cannot both be null.");
+        }
+
+        // Verify other argument validity
+        if (numRows <= 0)
+        {
+            throw new ArgumentException(string.Format("Invalid number of rows '{0}'. Number of rows must be a positive integer.", rows));
+        }
+        if (numCols <= 0)
+        {
+            throw new ArgumentException(string.Format("Invalid number of columns '{0}'. Number of columns must be a positive integer.", columns));
+        }
+        if (maxNumberOfPaths <= 0)
+        {
+            throw new ArgumentException(string.Format("Invalid maximum number of paths '{0}'. Maximum number of paths must be a positive integer.", maxNumberOfPaths));
+        }
+        if (startRow < 0 || startRow >= numRows)
+        {
+            throw new ArgumentException(string.Format("Invalid start row '{0}'. Start row must be between zero (inclusive) and the number of rows '{1}' (exclusive).", startRow, rows));
+        }
+        if (startCol < 0 || startCol >= numCols)
+        {
+            throw new ArgumentException(string.Format("Invalid start column '{0}'. Start column must be between zero (inclusive) and the number of columns '{1}' (exclusive).", startColumn, columns));
         }
 
         // Assign data properties

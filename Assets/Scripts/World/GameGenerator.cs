@@ -7,7 +7,7 @@ public class GameGenerator : MonoBehaviour
 {
 	void Start()
     {
-        int rows = 5;
+        /*int rows = 5;
         int cols = 5;
         int maxNoOfPaths = 3;
         int startRow = 4;
@@ -37,13 +37,54 @@ public class GameGenerator : MonoBehaviour
                 }
             }
             Debug.Log(strBuilder.ToString());
-        }
+        }*/
     }
-	
-	void Update()
+
+    /// <summary>
+    /// Builds paths through an empty world, and returns the world.
+    /// </summary>
+    /// <param name="options">The options for generating the paths.</param>
+    /// <returns>The world with the newly generated paths.</returns>
+    public World GeneratePaths(PathFindingOptions options)
     {
-	
-	}
+        // Create the new world
+        World world = new World(new List<Path>());
+
+        // Start generating paths
+        bool pathGenerationSucceeded = true;
+
+        // Generate paths until we hit the maximum or path generation fails
+        while (world.ChildPaths.Count < options.MaxNumberOfPaths && pathGenerationSucceeded)
+        {
+            // Attempt to generate the next path
+            Path generatedPath;
+            pathGenerationSucceeded = GeneratePath(out generatedPath, world, options);
+        }
+
+        return world;
+    }
+
+    public bool GeneratePath(out Path generatedPath, World world, PathFindingOptions options)
+    {
+        /* Diagram of World Coordinates and Directions
+         *
+         * array[5,4]
+         *
+         *         UP       
+         * L [ 00 01 02 03 ] R
+         * E [ 10 11 12 13 ] I
+         * F [ 20 21 22 23 ] G
+         * T [ 30 31 32 33 ] H
+         *   [ 40 41 42 43 ] T
+         *        DOWN
+         *
+         * World Dimension 0 Length (# of Rows): 5
+         * World Dimension 1 Length (# of Cols): 4
+        */
+
+
+        return true;
+    }
 
     /// <summary>
     /// Builds a given number of paths through a new world with the specified dimensions.
