@@ -64,7 +64,14 @@ public class GameGenerator : MonoBehaviour
         return world;
     }
 
-    public bool GeneratePath(out Path generatedPath, World world, PathFindingOptions options)
+    /// <summary>
+    /// Attempts to generate a new path through the world.
+    /// </summary>
+    /// <param name="generatedPath">The newly generated path.</param>
+    /// <param name="world">The world to build the path in.</param>
+    /// <param name="options">The options for generating the path.</param>
+    /// <returns>True if path generation succeeded, false otherwise.</returns>
+    private bool GeneratePath(out Path generatedPath, World world, PathFindingOptions options)
     {
         /* Diagram of World Coordinates and Directions
          *
@@ -82,8 +89,126 @@ public class GameGenerator : MonoBehaviour
          * World Dimension 1 Length (# of Cols): 4
         */
 
+        // Create the new path and add it to the world
+        generatedPath = new Path(new List<PathNode>(), world);
+        world.ChildPaths.Add(generatedPath);
 
-        return true;
+        // Add the first "start" node to the path
+        PathNode startNode = new PathNode(generatedPath, options.StartingRow, options.StartingCol, PathNode.Role.START);
+        generatedPath.AppendNewNode(startNode);
+
+        // Declare iteration variables
+        bool addNewNode = true;
+        bool pathGeneratedSuccessfully = false;
+
+        // Loop and add nodes until we are told to stop
+        while (addNewNode)
+        {
+
+            PathNode newNode;
+            PathGenerationStatus newStatus = AddNodeToPath(out newNode, world, generatedPath, options);
+
+            // If we added or removed a node, try to add another one
+            if (newStatus == PathGenerationStatus.ADDED_NODE || newStatus == PathGenerationStatus.REMOVED_NODE)
+            {
+                // Add another node
+                addNewNode = true;
+            }
+
+            // If the path is finished or failed, stop adding nodes
+            else
+            {
+                // Stop adding nodes
+                addNewNode = false;
+
+                // Log if we succeeded at generating the path
+                pathGeneratedSuccessfully = newStatus == PathGenerationStatus.PATH_FINISHED;
+            }
+        }
+
+        // If we generated the path, return success
+        if (pathGeneratedSuccessfully)
+        {
+            // First, remove all temporary and block nodes
+            generatedPath.RemoveAllNodesWithRole(PathNode.Role.TEMPORARY, PathNode.Role.BLOCK);
+
+            return true;
+        }
+
+        // Otherwise, we failed to generate the path, so remove all references to it and return failure
+        else
+        {
+            generatedPath.RemoveAllNodes();
+            world.ChildPaths.Remove(generatedPath);
+            generatedPath = null;
+
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Attempts to add a new node to the current path.
+    /// </summary>
+    /// <param name="newNode">The newly generated node.</param>
+    /// <param name="world">The wold to build the node in.</param>
+    /// <param name="path">The path to add the new node to. The path should contain at least a "START" node.</param>
+    /// <param name="options">The options for generating the node.</param>
+    /// <returns>The result of trying to add a new node.</returns>
+    private PathGenerationStatus AddNodeToPath(out PathNode newNode, World world, Path path, PathFindingOptions options)
+    {
+        newNode = new PathNode(path, 0, 0);
+
+        // Find the last node that is not temporary or block
+        PathNode lastValidNode = path.LastNode;
+        while (lastValidNode.NodeRole == PathNode.Role.TEMPORARY || lastValidNode.NodeRole == PathNode.Role.BLOCK)
+        {
+            lastValidNode = lastValidNode.PreviousNode;
+        }
+
+        // Get the row and col for this node
+        int prevRow = lastValidNode.WorldRow;
+        int prevCol = lastValidNode.WorldCol;
+
+        // Determine which directions are valid to move in
+        List<Direction> validDirections = new List<Direction>();
+        foreach (var dirToCheck in new Direction[] { Direction.UP, Direction.RIGHT, Direction.DOWN, Direction.LEFT })
+        {
+            // Get the new coordinates for this direction
+            int rowInDirection = prevRow;
+            int colInDirection = prevCol;
+            GetNewCoordinatesFromDirection(ref rowInDirection, ref colInDirection, dirToCheck);
+
+            // See if we can add a node here
+            if (CanPlaceNodeAtLocation(world, path, rowInDirection, colInDirection, options))
+            {
+                validDirections.Add(dirToCheck);
+            }
+        }
+
+        // Make sure we can move in at least one direction
+        if (validDirections.Count == 0)
+        {
+            // If we can't, and we're at the start, we've failed to create the path
+            if (lastValidNode.NodeRole == PathNode.Role.START)
+            {
+                return PathGenerationStatus.PATH_FAILED;
+            }
+
+            // Otherwise, turn this node into a block node and return that we've removed a node
+            else
+            {
+                lastValidNode.NodeRole = PathNode.Role.BLOCK;
+                return PathGenerationStatus.REMOVED_NODE;
+            }
+        }
+
+        // If we can, add a new node
+        else
+        {
+            // TODO: finish implementation
+        }
+
+        return PathGenerationStatus.ADDED_NODE;
     }
 
     /// <summary>
@@ -274,51 +399,50 @@ public class GameGenerator : MonoBehaviour
     }
 
     /// <summary>
-    /// 
+    /// Checks whether or not we can place a node at the given location.
     /// </summary>
-    /// <param name="world"></param>
-    /// <param name="currentRow"></param>
-    /// <param name="currentColumn"></param>
-    /// <param name="directionToCheck"></param>
-    /// <param name="endingSide"></param>
-    /// <returns></returns>
-    private bool CanMoveInDirection(PathNode[,] world, int currentRow, int currentColumn, Direction directionToCheck, Direction endingSide)
+    /// <param name="world">The current world to place a node in.</param>
+    /// <param name="currentPath">The path that the node would belong to.</param>
+    /// <param name="row">The row to place the node in.</param>
+    /// <param name="col">The column to place the node in.</param>
+    /// <param name="options">The path finding options.</param>
+    /// <returns>True if we can place a node there, false otherwise.</returns>
+    private bool CanPlaceNodeAtLocation(World world, Path path, int row, int col, PathFindingOptions options)
     {
-        // Pull relevant info out of the world
-        int rowsInWorld = world.GetLength(0);
-        int colsInWorld = world.GetLength(1);
-
-        // We can never move in NONE direction
-        if (directionToCheck == Direction.NONE)
+        // Check for moving off the world
+        if (row < 0 || row >= options.NumRows ||
+            col < 0 || col >= options.NumCols)
         {
             return false;
         }
 
-        // Create new row / column values for after movement
-        int targetRow = currentRow;
-        int targetColumn = currentColumn;
-        GetNewCoordinatesFromDirection(ref targetRow, ref targetColumn, directionToCheck);
+        // Get the nodes at the new location
+        List<PathNode> nodesAtLocation = world.GetNodesAtLocation(row, col);
 
-        // Check for moving off the world
-        if (targetRow < 0)
+        // Check these nodes for intersection conflicts
+        foreach (var node in nodesAtLocation)
         {
-            return endingSide == Direction.UP;
-        }
-        else if (targetRow >= rowsInWorld)
-        {
-            return endingSide == Direction.DOWN;
-        }
-        else if (targetColumn < 0)
-        {
-            return endingSide == Direction.LEFT;
-        }
-        else if (targetColumn >= colsInWorld)
-        {
-            return endingSide == Direction.RIGHT;
+            // If we would intersect with ourself, return false
+            if (node.ParentPath == path)
+            {
+                return false;
+            }
+
+            // If this node is a block node, return false
+            if (node.NodeRole == PathNode.Role.BLOCK)
+            {
+                return false;
+            }
+
+            // If we would intersect with a different path and we're not allowed to do so, return false
+            if (node.ParentPath != path && !options.AllowIntersection)
+            {
+                return false;
+            }
         }
 
-        // Finally, check the target location for an existing node
-        return world[targetRow, targetColumn] == null;
+        // If we got here, than we can move here
+        return true;
     }
 
     /// <summary>
@@ -384,49 +508,5 @@ public class GameGenerator : MonoBehaviour
             default:
                 throw new ArgumentException(string.Format("Direction to reverse '{0}' was not recognized.", directionToReverse));
         }
-    }
-
-    /// <summary>
-    /// Removes all temporary nodes from the given world.
-    /// </summary>
-    /// <param name="world">The world to remove the path nodes from.</param>
-    private void RemoveTemporaryPathNodes(ref PathNode[,] world)
-    {
-        for (int row = 0; row < world.GetLength(0); row++)
-        {
-            for (int col = 0; col < world.GetLength(1); col++)
-            {
-                PathNode currentNode = world[row, col];
-                if (currentNode != null && currentNode.NodeRole == PathNode.Role.TEMPORARY)
-                {
-                    world[row, col] = null;
-                }
-            }
-        }
-    }
-
-    // TODO: create path class for better management
-
-    public class PathNode
-    {
-        /// <summary>
-        /// Instantiate a PathNode instance.
-        /// </summary>
-        /// <param name="directionToNextNode">The direction that path continues from this node.</param>
-        /// <param name="directionToPreviousNode">The direction that path takes leading to this node.</param>
-        /// <param name="pathId">The id of the path that this node corresponds to.</param>
-        /// <param name="nodeRole">The role for this node (NORMAL by default).</param>
-        public PathNode(Direction directionToNextNode, Direction directionToPreviousNode, int pathId, Role nodeRole = Role.NORMAL)
-        {
-            DirectionToNextNode = directionToNextNode;
-            DirectionToPreviousNode = directionToPreviousNode;
-            PathId = pathId;
-            NodeRole = nodeRole;
-        }
-
-        public Direction DirectionToNextNode { get; set; }
-        public Direction DirectionToPreviousNode { get; set; }
-        public int PathId { get; set; }
-        public Role NodeRole { get; set; }
     }
 }
