@@ -39,6 +39,7 @@ public class PathNode
         WorldRow = worldRow;
         WorldCol = worldCol;
         NodeRole = nodeRole;
+        BlockedDirections = new HashSet<Direction>();
     }
 
     //------//
@@ -50,7 +51,6 @@ public class PathNode
         START,      // The first node in the path
         END,        // The last node in a complete path
         TEMPORARY,  // A node that is just a temporary placeholder
-        BLOCK       // A node that should never be moved through
     }
     public Role NodeRole { get; set; }
 
@@ -103,6 +103,11 @@ public class PathNode
         get { return GetDirectionToNode(NextNode); }
     }
 
+    //--------------------//
+    // Blocked Directions //
+    //--------------------//
+    public HashSet<Direction> BlockedDirections { get; set; }
+
     //-------------//
     // Other Nodes //
     //-------------//
@@ -140,6 +145,10 @@ public class PathNode
 
         // If we can't get it, return null
         catch (IndexOutOfRangeException)
+        {
+            return null;
+        }
+        catch (ArgumentOutOfRangeException)
         {
             return null;
         }
@@ -236,9 +245,11 @@ public class Path
     public void RemoveLastNode()
     {
         // If we have a last node, remove it
-        if (LastNode != null)
+        PathNode lastNode = LastNode;
+        if (lastNode != null)
         {
-            ChildNodes.Remove(LastNode);
+            ChildNodes.Remove(lastNode);
+            ParentWorld.RemovePathNodeFromWorld(lastNode);
         }
     }
 
@@ -251,8 +262,6 @@ public class Path
         foreach (var node in ChildNodes)
         {
             ParentWorld.RemovePathNodeFromWorld(node);
-
-            // NOTE: Don't bother calling RemoveNode() since we're clearing all nodes anyway
         }
 
         // Remove all the nodes from the path
@@ -310,9 +319,15 @@ public class World
     /// Instantiates a new World instance.
     /// </summary>
     /// <param name="childPaths">The paths that make up the world.</param>
-    public World(List<Path> childPaths)
+    /// <param name="numRows">The number of rows in the world.</param>
+    /// <param name="numCols">The number of columns in the world.</param>
+    public World(List<Path> childPaths, int numRows, int numCols)
     {
         ChildPaths = childPaths;
+        ChildNodes = new Dictionary<Tuple<int, int>, List<PathNode>>();
+
+        NumRows = numRows;
+        NumCols = numCols;
     }
 
     //-------------//
@@ -449,6 +464,12 @@ public class World
     }
 
     public List<Path> ChildPaths { get; private set; }
+
+    //------------//
+    // Dimensions //
+    //------------//
+    public int NumRows { get; set; }
+    public int NumCols { get; set; }
 }
 
 public class PathFindingOptions
@@ -494,11 +515,11 @@ public class PathFindingOptions
         // Ensure our starting row and col are constrained to inside the world
         if (startingRow < 0 || startingRow >= numRows)
         {
-            throw new ArgumentException(string.Format("Invalid start row '{0}'. Start row must be between zero (inclusive) and the number of rows '{1}' (exclusive).", startRow, numRows));
+            throw new ArgumentException(string.Format("Invalid start row '{0}'. Start row must be between zero (inclusive) and the number of rows '{1}' (exclusive).", startingRow, numRows));
         }
         if (startingCol < 0 || startingCol >= numCols)
         {
-            throw new ArgumentException(string.Format("Invalid start column '{0}'. Start column must be between zero (inclusive) and the number of columns '{1}' (exclusive).", startCol, numCols));
+            throw new ArgumentException(string.Format("Invalid start column '{0}'. Start column must be between zero (inclusive) and the number of columns '{1}' (exclusive).", startingCol, numCols));
         }
 
         // Ensure our ending row and col are constrained to inside the world
@@ -520,7 +541,6 @@ public class PathFindingOptions
         EndingCol = endingCol;
         MaxNumberOfPaths = maxNumberOfPaths;
         AllowIntersection = allowIntersection;
-        AllowSelfIntersection = allowSelfIntersection;
     }
 
     //------//

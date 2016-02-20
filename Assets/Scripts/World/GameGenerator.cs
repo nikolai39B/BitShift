@@ -5,39 +5,66 @@ using System.Collections.Generic;
 
 public class GameGenerator : MonoBehaviour
 {
+    // TODO: Migrate to breadth-first :(
+
 	void Start()
     {
-        /*int rows = 5;
-        int cols = 5;
-        int maxNoOfPaths = 3;
-        int startRow = 4;
-        int startCol = 2;
-        Direction endingSide = Direction.UP;
-        int numberOfPathsGenerated;
+        // Bulid the options
+        int rows = 11, cols = 10, startRow = 0, startCol = 2, endRow = 10, maxNoOfPaths = 3;
+        PathFindingOptions options = new PathFindingOptions(rows, cols, startRow, startCol, endRow, null, maxNoOfPaths, true);
 
-        PathNode[,] world = GeneratePaths(rows, cols, maxNoOfPaths, startRow, startCol, endingSide, out numberOfPathsGenerated);
+        // Build the world
+        World world = GeneratePaths(options);
 
-        for (int row = 0; row < world.GetLength(0); row++)
+        // Print the world
+        for (int row = 0; row < world.NumRows; row++)
         {
             StringBuilder strBuilder = new StringBuilder();
-            for (int col = 0; col < world.GetLength(1); col++)
+            for (int col = 0; col < world.NumCols; col++)
             {
-                PathNode currentNode = world[row, col];
+                // Get the node (if any) at this location
+                PathNode currentNode = world.GetNodeAtLocation(row, col);
+
+                // If there's no node, print that
                 if (currentNode == null)
                 {
-                    strBuilder.Append(" -");
+                    strBuilder.Append(" ---");
                 }
+
+                // If the node is the start node, print that
                 else if (currentNode.NodeRole == PathNode.Role.START)
                 {
-                    strBuilder.Append(" S");
+                    strBuilder.Append(" SS");
                 }
+
+                // Otherwise, determine what path it belongs to, and map it to a character
                 else
                 {
-                    strBuilder.Append(string.Format(" {0}", currentNode.PathId));
+                    int pathIndex = world.ChildPaths.IndexOf(currentNode.ParentPath);
+                    char dirChar;
+                    switch (currentNode.DirToNextNode)
+                    {
+                        case Direction.UP:
+                            dirChar = '^';
+                            break;
+                        case Direction.RIGHT:
+                            dirChar = '>';
+                            break;
+                        case Direction.DOWN:
+                            dirChar = 'v';
+                            break;
+                        case Direction.LEFT:
+                            dirChar = '<';
+                            break;
+                        default:
+                            dirChar = 'X';
+                            break;
+                    }
+                    strBuilder.Append(string.Format(" {0}{1}", pathIndex, dirChar));
                 }
             }
             Debug.Log(strBuilder.ToString());
-        }*/
+        }
     }
 
     /// <summary>
@@ -48,7 +75,7 @@ public class GameGenerator : MonoBehaviour
     public World GeneratePaths(PathFindingOptions options)
     {
         // Create the new world
-        World world = new World(new List<Path>());
+        World world = new World(new List<Path>(), options.NumRows, options.NumCols);
 
         // Start generating paths
         bool pathGenerationSucceeded = true;
@@ -129,8 +156,8 @@ public class GameGenerator : MonoBehaviour
         // If we generated the path, return success
         if (pathGeneratedSuccessfully)
         {
-            // First, remove all temporary and block nodes
-            generatedPath.RemoveAllNodesWithRole(PathNode.Role.TEMPORARY, PathNode.Role.BLOCK);
+            // First, remove all temporary nodes
+            generatedPath.RemoveAllNodesWithRole(PathNode.Role.TEMPORARY);
 
             return true;
         }
@@ -156,23 +183,21 @@ public class GameGenerator : MonoBehaviour
     /// <returns>The result of trying to add a new node.</returns>
     private PathGenerationStatus AddNodeToPath(out PathNode newNode, World world, Path path, PathFindingOptions options)
     {
-        newNode = new PathNode(path, 0, 0);
-
-        // Find the last node that is not temporary or block
-        PathNode lastValidNode = path.LastNode;
-        while (lastValidNode.NodeRole == PathNode.Role.TEMPORARY || lastValidNode.NodeRole == PathNode.Role.BLOCK)
-        {
-            lastValidNode = lastValidNode.PreviousNode;
-        }
-
-        // Get the row and col for this node
-        int prevRow = lastValidNode.WorldRow;
-        int prevCol = lastValidNode.WorldCol;
+        // Get the row and col for the last node
+        PathNode lastNode = path.LastNode;
+        int prevRow = path.LastNode.WorldRow;
+        int prevCol = path.LastNode.WorldCol;
 
         // Determine which directions are valid to move in
         List<Direction> validDirections = new List<Direction>();
         foreach (var dirToCheck in new Direction[] { Direction.UP, Direction.RIGHT, Direction.DOWN, Direction.LEFT })
         {
+            // Make sure this direction isn't blocked
+            if (lastNode.BlockedDirections.Contains(dirToCheck))
+            {
+                continue;
+            }
+
             // Get the new coordinates for this direction
             int rowInDirection = prevRow;
             int colInDirection = prevCol;
@@ -189,15 +214,30 @@ public class GameGenerator : MonoBehaviour
         if (validDirections.Count == 0)
         {
             // If we can't, and we're at the start, we've failed to create the path
-            if (lastValidNode.NodeRole == PathNode.Role.START)
+            if (path.LastNode.NodeRole == PathNode.Role.START)
             {
+                newNode = null;
                 return PathGenerationStatus.PATH_FAILED;
             }
 
-            // Otherwise, turn this node into a block node and return that we've removed a node
+            // Otherwise, remove this node, block the direction to it for the previous node, 
+            // and return that we've removed a node
             else
             {
-                lastValidNode.NodeRole = PathNode.Role.BLOCK;
+                newNode = null;
+
+                // Get the second to last node (which will become the last node)
+                // NOTE: This should never be null since we shouldn't be at the start
+                PathNode penultimateNode = path.LastNode.PreviousNode;
+                Debug.Assert(penultimateNode != null);
+
+                // Prevent us from going in this direction
+                Direction directionToLastNode = penultimateNode.DirToNextNode;
+                penultimateNode.BlockedDirections.Add(directionToLastNode);
+
+                // Remove the last node
+                path.RemoveLastNode();
+
                 return PathGenerationStatus.REMOVED_NODE;
             }
         }
@@ -205,197 +245,33 @@ public class GameGenerator : MonoBehaviour
         // If we can, add a new node
         else
         {
-            // TODO: finish implementation
-        }
-
-        return PathGenerationStatus.ADDED_NODE;
-    }
-
-    /// <summary>
-    /// Builds a given number of paths through a new world with the specified dimensions.
-    /// </summary>
-    /// <param name="rows">The number of rows in the world.</param>
-    /// <param name="columns">The number of columns in the world.</param>
-    /// <param name="maxNumberOfPaths">The maximum number of paths to place in the world. If the no more paths can be generated, the method will terminate early.</param>
-    /// <param name="startRow">The starting row for the paths.</param>
-    /// <param name="startColumn">The starting column for the paths.</param>
-    /// <param name="endingSide">The ending side for the paths.</param>
-    /// <param name="numberOfPathsGenerated">The number of paths actually generated by the method.</param>
-    /// <exception cref="ArgumentException">Thrown when one or more given arguments is invalid.</exception>
-    /// <returns>The new world, with the specified number of paths running through it. The start location is marked as a PathNode with directions 'NONE' and id '-1'.</returns>
-    public PathNode[,] GeneratePaths(int rows, int columns, int maxNumberOfPaths, int startRow, int startColumn, Direction endingSide, out int numberOfPathsGenerated)
-    {
-        // Verify argument validity
-        if (rows <= 0)
-        {
-            throw new ArgumentException(string.Format("Invalid number of rows '{0}'. Number of rows must be a positive integer.", rows));
-        }
-        if (columns <= 0)
-        {
-            throw new ArgumentException(string.Format("Invalid number of columns '{0}'. Number of columns must be a positive integer.", columns));
-        }
-        if (maxNumberOfPaths <= 0)
-        {
-            throw new ArgumentException(string.Format("Invalid maximum number of paths '{0}'. Maximum number of paths must be a positive integer.", maxNumberOfPaths));
-        }
-        if (startRow < 0 || startRow >= rows)
-        {
-            throw new ArgumentException(string.Format("Invalid start row '{0}'. Start row must be between zero (inclusive) and the number of rows '{1}' (exclusive).", startRow, rows));
-        }
-        if (startColumn < 0 || startColumn >= columns)
-        {
-            throw new ArgumentException(string.Format("Invalid start column '{0}'. Start column must be between zero (inclusive) and the number of columns '{1}' (exclusive).", startColumn, columns));
-        }
-        if (endingSide == Direction.NONE)
-        {
-            throw new ArgumentException("Ending side cannot be 'Direction.NONE'.");
-        }
-
-        // Instantiate the world
-        PathNode[,] world = new PathNode[rows, columns];
-
-        // Place the start location
-        world[startRow, startColumn] = new PathNode(Direction.NONE, Direction.NONE, -1, PathNode.Role.START);
-
-        // Add the paths
-        numberOfPathsGenerated = 0;
-        while (numberOfPathsGenerated < maxNumberOfPaths)
-        {
-            // Add this iteration's path
-            bool pathGenerated = AddPathToWorld(ref world, startRow, startColumn, endingSide, numberOfPathsGenerated);
-
-            if (pathGenerated)
-            {
-                // If we manage to add a path to the world, increment the numberOfPathsGenerated variable
-                numberOfPathsGenerated++;
-            }
-            else
-            {
-                // Otherwise, break out early
-                break;
-            }
-        }
-
-        // Return our new world with the generated paths
-        return world;
-    }
-
-    /// <summary>
-    /// Generate and add a new path the the given world.
-    /// </summary>
-    /// <param name="world">The world to add a path to.</param>
-    /// <param name="startRow">The path start row.</param>
-    /// <param name="startColumn">The path start column.</param>
-    /// <param name="endingSide">The side that the path ends on.</param>
-    /// <param name="pathId">The id for the path to generate.</param>
-    /// <returns>True if the path was generated and added successfully; false otherwise.</returns>
-    private bool AddPathToWorld(ref PathNode[,] world, int startRow, int startColumn, Direction endingSide, int pathId)
-    {
-        /* Diagram of World Coordinates and Directions
-         *
-         * array[5,4]
-         *
-         *         UP       
-         * L [ 00 01 02 03 ] R
-         * E [ 10 11 12 13 ] I
-         * F [ 20 21 22 23 ] G
-         * T [ 30 31 32 33 ] H
-         *   [ 40 41 42 43 ] T
-         *        DOWN
-         *
-         * World Dimension 0 Length (# of Rows): 5
-         * World Dimension 1 Length (# of Cols): 4
-        */
-
-        // Pull relevant info out of the world
-        int rowsInWorld = world.GetLength(0);
-        int colsInWorld = world.GetLength(1);
-
-        // Define values for iterations
-        bool addNewNode = true;
-        bool pathCouldNotBeGenerated = false;
-        int currentRow = startRow;
-        int currentColumn = startColumn;
-        Direction directionToLastNode = Direction.NONE;
-
-        while (addNewNode)
-        {
-            // Determine which directions are valid
-            List<Direction> validDirections = new List<Direction>();
-            foreach (var dirToCheck in new Direction[] { Direction.UP, Direction.RIGHT, Direction.DOWN, Direction.LEFT })
-            {
-                if (CanMoveInDirection(world, currentRow, currentColumn, dirToCheck, endingSide))
-                {
-                    validDirections.Add(dirToCheck);
-                }
-            }
-
-            if (validDirections.Count == 0)
-            {
-                // If we're at the start, then we can't add a new path
-                if (currentRow == startRow && currentColumn == startColumn)
-                {
-                    addNewNode = false;
-                    pathCouldNotBeGenerated = true;
-                    break;
-                }
-
-                // Otherwise, step back
-                else
-                {
-                    // Get the row and column for the previous node
-                    int previousRow = currentRow;
-                    int previousColumn = currentColumn;
-                    GetNewCoordinatesFromDirection(ref previousRow, ref previousColumn, directionToLastNode);
-
-                    // Set a temporary node at our current location so we don't go back here
-                    PathNode temporaryNodeToAdd = new PathNode(Direction.NONE, Direction.NONE, pathId, PathNode.Role.TEMPORARY);
-                    world[currentRow, currentColumn] = temporaryNodeToAdd;
-
-                    // Set the current row and column for the next iteration
-                    currentRow = previousRow;
-                    currentColumn = previousColumn;
-                    continue;
-                }
-            }
-
             // Get the direction to move
             int directionIndex = UnityEngine.Random.Range(0, validDirections.Count);
             Direction directionToMove = validDirections[directionIndex];
 
-            // Add a new node at our current location (if we're not at the start)
-            if (currentRow != startRow || currentColumn != startColumn)
+            // Get the coordinates for the next node
+            int nextRow = prevRow;
+            int nextCol = prevCol;
+            GetNewCoordinatesFromDirection(ref nextRow, ref nextCol, directionToMove);
+
+            // Create the next node and add it to the path
+            newNode = new PathNode(path, nextRow, nextCol);
+            path.AppendNewNode(newNode);
+
+            // If we hit the end, update the node role and return path complete
+            if ((options.EndingRow == null || options.EndingRow == newNode.WorldRow) &&
+                (options.EndingCol == null || options.EndingCol == newNode.WorldCol))
             {
-                PathNode nodeToAdd = new PathNode(directionToMove, directionToLastNode, pathId);
-                world[currentRow, currentColumn] = nodeToAdd;
+                newNode.NodeRole = PathNode.Role.END;
+                return PathGenerationStatus.PATH_FINISHED;
             }
 
-            // Update direction to last node for next iteration (so the next node can point at us)
-            directionToLastNode = ReverseDirection(directionToMove);
-
-            // Get the new coordinates and create a node
-            int targetRow = currentRow;
-            int targetColumn = currentColumn;
-            GetNewCoordinatesFromDirection(ref targetRow, ref targetColumn, directionToMove);
-
-            // If we're off the world, then we must be done with this path
-            if (targetRow < 0 ||
-                targetRow >= rowsInWorld ||
-                targetColumn < 0 ||
-                targetColumn >= colsInWorld)
+            // Otherwise, return that we added a node
+            else
             {
-                addNewNode = false;
-                break;
+                return PathGenerationStatus.ADDED_NODE;
             }
-
-            // Set the current row and column for the next iteration
-            currentRow = targetRow;
-            currentColumn = targetColumn;
         }
-
-        RemoveTemporaryPathNodes(ref world);
-
-        return !pathCouldNotBeGenerated;
     }
 
     /// <summary>
@@ -424,12 +300,6 @@ public class GameGenerator : MonoBehaviour
         {
             // If we would intersect with ourself, return false
             if (node.ParentPath == path)
-            {
-                return false;
-            }
-
-            // If this node is a block node, return false
-            if (node.NodeRole == PathNode.Role.BLOCK)
             {
                 return false;
             }
