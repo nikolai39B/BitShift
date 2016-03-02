@@ -39,7 +39,6 @@ public class PathNode
         WorldRow = worldRow;
         WorldCol = worldCol;
         NodeRole = nodeRole;
-        BlockedDirections = new HashSet<Direction>();
     }
 
     //------//
@@ -51,6 +50,7 @@ public class PathNode
         START,      // The first node in the path
         END,        // The last node in a complete path
         TEMPORARY,  // A node that is just a temporary placeholder
+        BLOCK,      // A node that should never be passed through
     }
     public Role NodeRole { get; set; }
 
@@ -102,11 +102,6 @@ public class PathNode
     {
         get { return GetDirectionToNode(NextNode); }
     }
-
-    //--------------------//
-    // Blocked Directions //
-    //--------------------//
-    public HashSet<Direction> BlockedDirections { get; set; }
 
     //-------------//
     // Other Nodes //
@@ -215,11 +210,10 @@ public class Path
     /// <summary>
     /// Instantiates a new Path object.
     /// </summary>
-    /// <param name="childNodes">The path nodes that make up the path.</param>
     /// <param name="parentWorld">The world that this path lives in.</param>
-    public Path(List<PathNode> childNodes, World parentWorld)
+    public Path(World parentWorld)
     {
-        ChildNodes = childNodes;
+        ChildNodes = new List<PathNode>();
         ParentWorld = parentWorld;
     }
 
@@ -318,12 +312,11 @@ public class World
     /// <summary>
     /// Instantiates a new World instance.
     /// </summary>
-    /// <param name="childPaths">The paths that make up the world.</param>
     /// <param name="numRows">The number of rows in the world.</param>
     /// <param name="numCols">The number of columns in the world.</param>
-    public World(List<Path> childPaths, int numRows, int numCols)
+    public World(int numRows, int numCols)
     {
-        ChildPaths = childPaths;
+        ChildPaths = new List<Path>();
         ChildNodes = new Dictionary<Tuple<int, int>, List<PathNode>>();
 
         NumRows = numRows;

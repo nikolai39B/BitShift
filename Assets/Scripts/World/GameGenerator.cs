@@ -5,16 +5,14 @@ using System.Collections.Generic;
 
 public class GameGenerator : MonoBehaviour
 {
-    // TODO: Migrate to breadth-first :(
-
-	void Start()
+    /*void Start()
     {
         // Bulid the options
-        int rows = 11, cols = 10, startRow = 0, startCol = 2, endRow = 10, maxNoOfPaths = 3;
-        PathFindingOptions options = new PathFindingOptions(rows, cols, startRow, startCol, endRow, null, maxNoOfPaths, true);
+        int rows = 26, cols = 25, startRow = 0, startCol = 13, endRow = 25, maxNoOfPaths = 3;
+        PathFindingOptions options = new PathFindingOptions(rows, cols, startRow, startCol, endRow, null, maxNoOfPaths, false);
 
         // Build the world
-        World world = GeneratePaths(options);
+        World world = GenerateWorld(options);
 
         // Print the world
         for (int row = 0; row < world.NumRows; row++)
@@ -65,28 +63,32 @@ public class GameGenerator : MonoBehaviour
             }
             Debug.Log(strBuilder.ToString());
         }
-    }
+    }*/
 
     /// <summary>
     /// Builds paths through an empty world, and returns the world.
     /// </summary>
     /// <param name="options">The options for generating the paths.</param>
     /// <returns>The world with the newly generated paths.</returns>
-    public World GeneratePaths(PathFindingOptions options)
+    public World GenerateWorld(PathFindingOptions options)
     {
         // Create the new world
-        World world = new World(new List<Path>(), options.NumRows, options.NumCols);
+        World world = new World(options.NumRows, options.NumCols);
 
         // Start generating paths
         bool pathGenerationSucceeded = true;
+        Path blockingNodes = new Path(world);
 
         // Generate paths until we hit the maximum or path generation fails
         while (world.ChildPaths.Count < options.MaxNumberOfPaths && pathGenerationSucceeded)
         {
             // Attempt to generate the next path
             Path generatedPath;
-            pathGenerationSucceeded = GeneratePath(out generatedPath, world, options);
+            pathGenerationSucceeded = GeneratePath(out generatedPath, world, blockingNodes, options);
         }
+
+        // Destroy all blocking nodes
+        blockingNodes.RemoveAllNodes();
 
         return world;
     }
@@ -96,28 +98,13 @@ public class GameGenerator : MonoBehaviour
     /// </summary>
     /// <param name="generatedPath">The newly generated path.</param>
     /// <param name="world">The world to build the path in.</param>
+    /// <param name="blockingNodes">An auxilary path used to hold the blocking nodes.</param>
     /// <param name="options">The options for generating the path.</param>
     /// <returns>True if path generation succeeded, false otherwise.</returns>
-    private bool GeneratePath(out Path generatedPath, World world, PathFindingOptions options)
+    private bool GeneratePath(out Path generatedPath, World world, Path blockingNodes, PathFindingOptions options)
     {
-        /* Diagram of World Coordinates and Directions
-         *
-         * array[5,4]
-         *
-         *         UP       
-         * L [ 00 01 02 03 ] R
-         * E [ 10 11 12 13 ] I
-         * F [ 20 21 22 23 ] G
-         * T [ 30 31 32 33 ] H
-         *   [ 40 41 42 43 ] T
-         *        DOWN
-         *
-         * World Dimension 0 Length (# of Rows): 5
-         * World Dimension 1 Length (# of Cols): 4
-        */
-
         // Create the new path and add it to the world
-        generatedPath = new Path(new List<PathNode>(), world);
+        generatedPath = new Path(world);
         world.ChildPaths.Add(generatedPath);
 
         // Add the first "start" node to the path
@@ -133,7 +120,7 @@ public class GameGenerator : MonoBehaviour
         {
 
             PathNode newNode;
-            PathGenerationStatus newStatus = AddNodeToPath(out newNode, world, generatedPath, options);
+            PathGenerationStatus newStatus = AddNodeToPath(out newNode, world, generatedPath, blockingNodes, options);
 
             // If we added or removed a node, try to add another one
             if (newStatus == PathGenerationStatus.ADDED_NODE || newStatus == PathGenerationStatus.REMOVED_NODE)
@@ -179,9 +166,10 @@ public class GameGenerator : MonoBehaviour
     /// <param name="newNode">The newly generated node.</param>
     /// <param name="world">The wold to build the node in.</param>
     /// <param name="path">The path to add the new node to. The path should contain at least a "START" node.</param>
+    /// <param name="blockingNodes">An auxilary path used to hold the blocking nodes.</param>
     /// <param name="options">The options for generating the node.</param>
     /// <returns>The result of trying to add a new node.</returns>
-    private PathGenerationStatus AddNodeToPath(out PathNode newNode, World world, Path path, PathFindingOptions options)
+    private PathGenerationStatus AddNodeToPath(out PathNode newNode, World world, Path path, Path blockingNodes, PathFindingOptions options)
     {
         // Get the row and col for the last node
         PathNode lastNode = path.LastNode;
@@ -192,12 +180,6 @@ public class GameGenerator : MonoBehaviour
         List<Direction> validDirections = new List<Direction>();
         foreach (var dirToCheck in new Direction[] { Direction.UP, Direction.RIGHT, Direction.DOWN, Direction.LEFT })
         {
-            // Make sure this direction isn't blocked
-            if (lastNode.BlockedDirections.Contains(dirToCheck))
-            {
-                continue;
-            }
-
             // Get the new coordinates for this direction
             int rowInDirection = prevRow;
             int colInDirection = prevCol;
@@ -226,14 +208,9 @@ public class GameGenerator : MonoBehaviour
             {
                 newNode = null;
 
-                // Get the second to last node (which will become the last node)
-                // NOTE: This should never be null since we shouldn't be at the start
-                PathNode penultimateNode = path.LastNode.PreviousNode;
-                Debug.Assert(penultimateNode != null);
-
-                // Prevent us from going in this direction
-                Direction directionToLastNode = penultimateNode.DirToNextNode;
-                penultimateNode.BlockedDirections.Add(directionToLastNode);
+                // Change the last node of the current path into a block node in our auxilary path
+                PathNode newBlockingNode = new PathNode(blockingNodes, lastNode.WorldRow, lastNode.WorldCol, PathNode.Role.BLOCK);
+                blockingNodes.AppendNewNode(newBlockingNode);
 
                 // Remove the last node
                 path.RemoveLastNode();
@@ -298,6 +275,12 @@ public class GameGenerator : MonoBehaviour
         // Check these nodes for intersection conflicts
         foreach (var node in nodesAtLocation)
         {
+            // If this node is a block node, return false
+            if (node.NodeRole == PathNode.Role.BLOCK)
+            {
+                return false;
+            }
+            
             // If we would intersect with ourself, return false
             if (node.ParentPath == path)
             {
