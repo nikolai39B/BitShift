@@ -24,6 +24,7 @@ public enum BasicTag
     // General
     CAMERA = 100,
     GAME_MANAGER = 101,
+    UI = 102,
     
     // Actors
     PLAYER = 200,
