@@ -1,34 +1,27 @@
 ﻿using UnityEngine;
-using UnityEngine.Events;
+using UnityEngine.EventSystems;
+using UnityEngine.SceneManagement;
 using UnityEngine.UI;
-using System.Collections.Generic;
 
 public class MainMenuButtonsManager : MonoBehaviour
 {
-    public void Start()
-    {
-        uiButtons = new List<RectTransform>();
-        uiButtons.Add(playButton);
-        uiButtons.Add(journalButton);
-        uiButtons.Add(recordsButton);
-        uiButtons.Add(settingsButton);
-    }
-
-    //---------//
-    // Buttons //
-    //---------//
-    public RectTransform playButton;
-    public RectTransform journalButton;
-    public RectTransform recordsButton;
-    public RectTransform settingsButton;
-
-    private List<RectTransform> uiButtons;
+    public EventSystem eventSystem;
 
     //------------------//
     // Button Utilities //
     //------------------//
-    public void OnMouseOver()
+    public void OnMouseOver(GameObject buttonObject)
     {
-        
+        Button button = buttonObject.GetComponent<Button>();
+        if (button != null)
+        {
+            button.Select();
+        }
+    }
+
+    public void OnPlayButtonClicked()
+    {
+        Debug.Log("Play button clicked.");
+        SceneManager.LoadScene(Scenes.mainMenu);
     }
 }
