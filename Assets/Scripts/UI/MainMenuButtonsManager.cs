@@ -21,7 +21,6 @@ public class MainMenuButtonsManager : MonoBehaviour
 
     public void OnPlayButtonClicked()
     {
-        Debug.Log("Play button clicked.");
-        SceneManager.LoadScene(Scenes.mainMenu);
+        SceneManager.LoadScene(Scenes.world);
     }
 }

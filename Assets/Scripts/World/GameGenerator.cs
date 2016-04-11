@@ -5,16 +5,38 @@ using System.Collections.Generic;
 
 public class GameGenerator : MonoBehaviour
 {
-    /*void Start()
+    //---------------//
+    // World Options //
+    //---------------//
+    public int rowsInWorld = 26;
+    public int columnsInWorld = 26;
+
+    public int startRow = 0;
+    public int startCol = 13;
+
+    public int endRow = 25;
+    public bool useEndRow = true;
+    public int endCol = 0;
+    public bool useEndCol = false;
+
+    public int maxNumberOfPaths = 3;
+    public bool allowPathIntersection = false;
+
+    void Awake()
     {
         // Bulid the options
-        int rows = 26, cols = 25, startRow = 0, startCol = 13, endRow = 25, maxNoOfPaths = 3;
-        PathFindingOptions options = new PathFindingOptions(rows, cols, startRow, startCol, endRow, null, maxNoOfPaths, false);
+        PathFindingOptions options = new PathFindingOptions(
+            rowsInWorld, columnsInWorld, startRow, startCol, 
+            useEndRow ? (int?)endRow : null, 
+            useEndCol ? (int?)endCol : null, 
+            maxNumberOfPaths, allowPathIntersection);
 
         // Build the world
         World world = GenerateWorld(options);
 
-        // Print the world
+        GetComponent<GameGeneratorDebug>().CreateTilesetFromWorld(world);
+
+        /* Print the world
         for (int row = 0; row < world.NumRows; row++)
         {
             StringBuilder strBuilder = new StringBuilder();
@@ -62,8 +84,10 @@ public class GameGenerator : MonoBehaviour
                 }
             }
             Debug.Log(strBuilder.ToString());
-        }
-    }*/
+        }*/
+
+
+    }
 
     /// <summary>
     /// Builds paths through an empty world, and returns the world.
