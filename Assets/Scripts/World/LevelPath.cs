@@ -7,14 +7,15 @@ public class LevelPath
     //-------------//
 
     /// <summary>
-    /// Instantiates a new level path in the given world with the given nodes.
+    /// Instantiates a new level path in the given world.
     /// </summary>
     /// <param name="parentWorld">The path's parent world.</param>
-    /// <param name="existingNodes">The path's starting nodes (or null for no starting nodes).</param>
-    public LevelPath(LevelWorld parentWorld, List<LevelNode> existingNodes = null)
+    public LevelPath(LevelWorld parentWorld)
     {
         ParentWorld = parentWorld;
-        ChildNodes = existingNodes == null ? new List<LevelNode>() : existingNodes;
+        ChildNodes = new List<LevelNode>();
+
+        ParentWorld.AddPath(this);
     }
 
 
@@ -25,25 +26,69 @@ public class LevelPath
     public LevelWorld ParentWorld { get; private set; }
     public List<LevelNode> ChildNodes { get; private set; }
 
+
+    //---------------//
+    // Updating Path //
+    //---------------//
+
+    /// <summary>
+    /// Deletes all child nodes in this path.
+    /// </summary>
+    public void ClearPath()
+    {
+        // Delete each child node
+        List<LevelNode> childNodesCopy = new List<LevelNode>(ChildNodes);
+        foreach (var node in childNodesCopy)
+        {
+            node.DeleteNode();
+        }
+
+        ChildNodes = new List<LevelNode>();
+    }
+
+    /// <summary>
+    /// Deletes all child nodes in this path and removes the path from the parent world.
+    /// </summary>
+    public void DeletePath()
+    {
+        // Remove all child nodes
+        ClearPath();
+
+        // Remove this path from the parent world
+        ParentWorld.RemovePath(this);
+        ParentWorld = null;
+    }
+
     //----------------//
-    // Path Splitting //
+    // Updating Nodes //
     //----------------//
 
     /// <summary>
-    /// Instantiates a new path with this path's nodes and world.
+    /// Adds a node to this path and the parent world at the given location.
     /// </summary>
-    /// <returns>The new path.</returns>
-    public LevelPath CreateDuplicatePath()
+    /// <param name="node">The node to add.</param>
+    /// <param name="row">The row to place the node in.</param>
+    /// <param name="col">The column to place the node in.</param>
+    public void AddNode(LevelNode node, int row, int col)
     {
-        LevelPath newPath = new LevelPath(ParentWorld, ChildNodes);
-
-        // Update references
-        ParentWorld.AddPath(newPath);
-        foreach (var node in ChildNodes)
+        if (!ChildNodes.Contains(node))
         {
-            node
+            ParentWorld.AddNode(node, row, col);
+            ChildNodes.Add(node);
         }
+        
+    }
 
-        return newPath;
+    /// <summary>
+    /// Removes the given node from this world.
+    /// </summary>
+    /// <param name="node">The node to remove.</param>
+    public void RemoveNode(LevelNode node)
+    {
+        if (ChildNodes.Contains(node))
+        {
+            ParentWorld.RemoveNode(node);
+            ChildNodes.Remove(node);
+        }
     }
 }

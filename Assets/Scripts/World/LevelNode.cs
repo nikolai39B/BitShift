@@ -9,28 +9,25 @@ public class LevelNode
     /// <summary>
     /// Instantiates a new level node with a single parent path.
     /// </summary>
-    /// <param name="parentWorld">The parent world for the node.</param>
     /// <param name="parentPath">The parent path for the node.</param>
-    public LevelNode(LevelWorld parentWorld, LevelPath parentPath, List<Direction> openSides)
-        : this(parentWorld, new List<LevelPath> { parentPath }, openSides)
+    /// <param name="row">The row of the world to add the node to.</param>
+    /// <param name="col">Thr column of the world to add the node to.</param>
+    /// <param name="openSides">The sides of this node that are open, or null for no open sides.</param>
+    public LevelNode(LevelPath parentPath, int row, int col, List<Direction> openSides = null)
     {
-    }
-
-    /// <summary>
-    /// Instantiates a new level node with multiple parent paths.
-    /// </summary>
-    /// <param name="parentWorld">The parent world for the node.</param>
-    /// <param name="parentPaths">A list of the parent paths for the node.</param>
-    public LevelNode(LevelWorld parentWorld, List<LevelPath> parentPaths, List<Direction> openSides)
-    {
-        ParentWorld = parentWorld;
-        ParentPaths = ParentPaths;
+        ParentPath = parentPath;
+        WorldRow = row;
+        WorldColumn = col;
 
         // Set all sides to closed
         foreach (var side in directions)
         {
-            UpdateOpenSideStatus(side, openSides.Contains(side));
+            bool sideIsOpen = openSides != null && openSides.Contains(side);
+            UpdateOpenSideStatus(side, sideIsOpen);
         }
+
+        // Insert the node into the structure
+        ParentPath.AddNode(this, row, col);
     }
 
 
@@ -38,62 +35,30 @@ public class LevelNode
     // References //
     //------------//
 
-    public LevelWorld ParentWorld { get; private set; }
-    public List<LevelPath> ParentPaths { get; private set; }
+    public LevelWorld ParentWorld { get { return ParentPath.ParentWorld; } }
+    public LevelPath ParentPath { get; private set; }
 
 
-    //----------------//
-    // Updating Paths //
-    //----------------//
+    //---------------//
+    // Updating Node //
+    //---------------//
 
-    
+    /// <summary>
+    /// Removes this node from its parent path and parent world.
+    /// </summary>
+    public void DeleteNode()
+    {
+        ParentPath.RemoveNode(this);
+        ParentPath = null;
+    }
 
 
     //----------//
     // Location //
     //----------//
-
-    private Tuple<int, int> worldCoordinates = null;
-    public Tuple<int, int> WorldCoordinates
-    {        
-        get
-        {
-            // Lazy initialization
-            // Note that this value should never change in the world
-            if (worldCoordinates == null)
-            {
-                worldCoordinates = GetWorldCoordinatesOfNode();
-            }
-
-            return worldCoordinates;
-        }
-    }
-
-    /// <summary>
-    /// Gets the world array row and column of this node.
-    /// </summary>
-    /// <returns>The node's coordinates.</returns>
-    private Tuple<int, int> GetWorldCoordinatesOfNode()
-    {
-        int row = -1;
-        int col = -1;
-
-        // Loop through all the elements in the world
-        for (int rr = 0; rr < ParentWorld.ChildNodes.GetLength(0); rr++)
-        {
-            for (int cc = 0; cc < ParentWorld.ChildNodes.GetLength(1); cc++)
-            {
-                // If we've found ourself, then set the row and col
-                if (ParentWorld.ChildNodes[rr, cc] == this)
-                {
-                    row = rr;
-                    col = cc;
-                }
-            }
-        }
-
-        return new Tuple<int, int>(row, col);
-    }
+    
+    public int WorldRow { get; private set; }
+    public int WorldColumn { get; private set; }
 
 
     //------------//
@@ -145,37 +110,17 @@ public class LevelNode
     }
 
 
-    //-----------------//
-    // Tail Node Flags //
-    //-----------------//
+    //----------------//
+    // Tail Node Flag //
+    //----------------//
 
     /// <summary>
-    /// Determines if this node is the tail node (the last node in order) of any path.
+    /// Determines if this node is the tail node (the last node in order) of the parent path.
     /// </summary>
-    /// <returns>True if this node is a tail node, false otherwise.</returns>
-    public bool IsTailNodeOfSomePath()
-    {
-        // Loop through all parent paths, and check if we're the tail node of any of them
-        foreach (var path in ParentPaths)
-        {
-            if (IsTailNodeOfSpecificPath(path))
-            {
-                return true;
-            }
-        }
-
-        // If we get here, then we're not a tail node
-        return false;
-    }
-
-    /// <summary>
-    /// Determines if this node is the tail node (the last node in order) in the given path.
-    /// </summary>
-    /// <param name="path">The path to check.</param>
     /// <returns>True if this node is the tail node, false otherwise.</returns>
-    public bool IsTailNodeOfSpecificPath(LevelPath path)
+    public bool IsTailNodeOfPath()
     {
-        int nodesInParentPath = path.ChildNodes.Count;
-        return path.ChildNodes[nodesInParentPath - 1] == this;
+        int nodesInParentPath = ParentPath.ChildNodes.Count;
+        return ParentPath.ChildNodes[nodesInParentPath - 1] == this;
     }
 }
