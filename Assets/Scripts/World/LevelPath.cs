@@ -59,6 +59,7 @@ public class LevelPath
         ParentWorld = null;
     }
 
+
     //----------------//
     // Updating Nodes //
     //----------------//
@@ -89,6 +90,34 @@ public class LevelPath
         {
             ParentWorld.RemoveNode(node);
             ChildNodes.Remove(node);
+        }
+    }
+
+    
+    //---------------------//
+    // Head and Tail Nodes //
+    //---------------------//
+
+    public LevelNode HeadNode
+    {
+        get
+        {
+            if (ChildNodes.Count > 0)
+            {
+                return ChildNodes[0];
+            }
+            return null;
+        }
+    }
+    public LevelNode TailNode
+    {
+        get
+        {
+            if (ChildNodes.Count > 0)
+            {
+                return ChildNodes[ChildNodes.Count - 1];
+            }
+            return null;
         }
     }
 }

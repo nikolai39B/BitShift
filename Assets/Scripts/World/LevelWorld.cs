@@ -82,10 +82,10 @@ public class LevelWorld
         }
 
         ChildPaths = new List<LevelPath>();
-        ChildNodes = new LevelNode[ChildNodes.GetLength(0), ChildNodes.GetLength(1)];
+        ChildNodes = new LevelNode[RowsInWorld, ColumnsInWorld];
     }
-    
-        
+
+
     //----------------//
     // Updating Paths //
     //----------------//
@@ -160,6 +160,14 @@ public class LevelWorld
                 "Cannot remove node from location({0}, {1}); this location is occupied by a different node.", node.WorldRow, node.WorldColumn));
         }
     }
+
+
+    //------------------//
+    // World Dimensions //
+    //------------------//
+
+    public int RowsInWorld { get { return ChildNodes.GetLength(0); } }
+    public int ColumnsInWorld { get { return ChildNodes.GetLength(1); } }
 }
 
 public enum Direction
