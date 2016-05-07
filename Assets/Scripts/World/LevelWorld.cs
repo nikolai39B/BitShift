@@ -132,7 +132,7 @@ public class LevelWorld
         if (ChildNodes[row, col] != null)
         {
             throw new InvalidOperationException(string.Format(
-                "Cannot add node to location ({0}, {1}); location already has node.", row, col));
+                "Cannot add node to location ({0}, {1}); location already has a node.", row, col));
         }
 
         // If we got here, we're good to proceed and add the node
