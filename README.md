@@ -1,2 +1,2 @@
-# VirusRunner
-Source for the Virus Runner game.
+# bIt Shift
+Source for the Bit Shift game.
