@@ -39,6 +39,11 @@ public class Tuple<T, U>
 
     public static bool operator ==(Tuple<T, U> first, Tuple<T, U> second)
     {
+        if (object.ReferenceEquals(first, null))
+        {
+            return object.ReferenceEquals(second, null);
+        }
+
         return first.Equals(second);
     }
 

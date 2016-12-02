@@ -14,8 +14,9 @@ public class LevelBuilder : MonoBehaviour
     public int startRow = 3;
     public int startCol = 3;
 
-    public float splitChance = 0.3f;
+    public float splitChance = 0.3f; // 0.0 is never split, 1.0 is always split
 
+    public float turnChanceModifier = 0.0f; // 0.0 is no modifier, 1.0 is always turn
 
     //------------//
     // Build Main //
@@ -23,7 +24,7 @@ public class LevelBuilder : MonoBehaviour
 
     void Start()
     {
-        BuildNewWorld();
+        //BuildNewWorld();
     }
 
     /// <summary>
@@ -70,9 +71,9 @@ public class LevelBuilder : MonoBehaviour
         Direction dirOfSecondPath = GetRandomDirection(possibleDirections);
 
         // Add the nodes to the world
-        AddNodeToWorld(startNode, firstPath, dirOfFirstPath);
+        ProcessPathContinuation(firstPath, startNode, dirOfFirstPath);
         LevelPath secondPath = new LevelPath(world);
-        AddNodeToWorld(startNode, secondPath, dirOfSecondPath);
+        ProcessPathContinuation(secondPath, startNode, dirOfSecondPath);
 
         // Begin adding paths
         List<LevelPath> currentActivePaths = new List<LevelPath>()
@@ -81,16 +82,61 @@ public class LevelBuilder : MonoBehaviour
             secondPath
         };
 
+        // Add preliminary paths
+        BuildWorldFromExistingPaths(world, currentActivePaths);
+
+        // Fill in empty nodes
+        Tuple<int, int> emptyNodeCoordinates = GetCoordinatesOfEmptyNodeInWorld(world, true);
+        while (emptyNodeCoordinates != null)
+        {
+            // Create the new path and node
+            LevelPath newPath = new LevelPath(world);
+            LevelNode newNode = new LevelNode(newPath, emptyNodeCoordinates.First, emptyNodeCoordinates.Second);
+
+            // Connect it to an adjacent non-empty node
+            LevelNode adjacentNode = GetAdjacentNonEmptyNode(world, newNode);
+            if (adjacentNode == null)
+            {
+                throw new InvalidOperationException(string.Format(
+                    "Cannot continue this path; node at ({0}, {1}) has no adjacent non-empty nodes.", newNode.WorldRow, newNode.WorldColumn));
+            }
+
+            // Get the direction to the adjacent node and connect the two
+            Direction dirToAdjacentNode = GetDirectionToCoordinates(newNode.WorldRow, newNode.WorldColumn, adjacentNode.WorldRow, adjacentNode.WorldColumn);
+            newNode.UpdateOpenSideStatus(dirToAdjacentNode, true);
+            adjacentNode.UpdateOpenSideStatus(GetOppositeDirection(dirToAdjacentNode), true);
+
+            BuildWorldFromExistingPaths(world, new List<LevelPath>() { newPath });
+            emptyNodeCoordinates = GetCoordinatesOfEmptyNodeInWorld(world, true);
+        }
+        
+        return startNode;
+    }
+
+
+    //---------------//
+    // Build Helpers //
+    //---------------//
+
+    /// <summary>
+    /// Continues building the world given the current active paths in it.
+    /// </summary>
+    /// <param name="world">The world to continue building.</param>
+    /// <param name="currentActivePaths">The current active paths in the world.</param>
+    /// <returns>The world after all active paths have completed.</returns>
+    private LevelWorld BuildWorldFromExistingPaths(LevelWorld world, List<LevelPath> currentActivePaths)
+    {
         while (currentActivePaths.Count > 0)
         {
             List<LevelPath> nextIterationActivePaths = new List<LevelPath>();
             foreach (var path in currentActivePaths)
             {
                 // Verify that the path has at least one node already
-                Debug.Assert(path.TailNode != null);
-                
+                LevelNode tailNode = path.TailNode;
+                Debug.Assert(tailNode != null);
+
                 // Get the possible directions to move
-                possibleDirections = GetPossibleDirectionsForPathContinuation(path);
+                List<Direction> possibleDirections = GetPossibleDirectionsForPathContinuation(path);
 
                 // Check to see if we're out of possible directions
                 if (possibleDirections.Count == 0)
@@ -99,29 +145,12 @@ public class LevelBuilder : MonoBehaviour
                     continue;
                 }
 
-                // Get the direction for the new node
+                // Continue the path in a random direction
                 Direction dirToContinueIn = GetRandomDirection(possibleDirections);
-
-                // Check if this is a join or if we're adding a new node
-                Tuple<int, int> newCoordinates = GetNewCoordinatesInDirection(path.TailNode, dirToContinueIn);
-                LevelNode nodeAtCoordinates = world.ChildNodes[newCoordinates.First, newCoordinates.Second];
-
-                // If there's no node at these coordinates, add the node
-                if (nodeAtCoordinates == null)
+                bool addPathToNextIteration = ProcessPathContinuation(path, tailNode, dirToContinueIn);
+                if (addPathToNextIteration)
                 {
-                    AddNodeToWorld(path.TailNode, path, dirToContinueIn);
-
-                    // This path continues next iteration
                     nextIterationActivePaths.Add(path);
-                }
-
-                // Otherwise, process a path join
-                else
-                {
-                    JoinNodes(path.TailNode, nodeAtCoordinates);
-
-                    // Note that we don't add this current path to the next iteration's paths; this path is done
-                    continue;
                 }
 
                 // Check for a split
@@ -129,14 +158,20 @@ public class LevelBuilder : MonoBehaviour
                 if (splitCheck < splitChance)
                 {
                     possibleDirections.Remove(dirToContinueIn);
-                    
+
                     // Check if there are any directions to continue in
-                    if (possibleDirections.Count == 0)
+                    if (possibleDirections.Count != 0)
                     {
                         // Get the direction for the new node
                         Direction dirToSplitIn = GetRandomDirection(possibleDirections);
 
-                        // TODO: Implement. Perhaps refactor lines 103 to 125
+                        // Create the new path and add a node to it
+                        LevelPath splitPath = new LevelPath(world);
+                        addPathToNextIteration = ProcessPathContinuation(splitPath, tailNode, dirToSplitIn);
+                        if (addPathToNextIteration)
+                        {
+                            nextIterationActivePaths.Add(splitPath);
+                        }
                     }
                 }
             }
@@ -144,15 +179,90 @@ public class LevelBuilder : MonoBehaviour
             // Update the current paths for the next iteration
             currentActivePaths = nextIterationActivePaths;
         }
-        
 
-        return startNode;
+        return world;
     }
 
+    /// <summary>
+    /// Finds and returns the coordinates of the first empty node in the given world.
+    /// </summary>
+    /// <param name="world">The world whose node to return.</param>
+    /// <param name="mustBeAdjacentToNonEmptyNode">Whether or not the empty node must be adjacent to a non-empty node.</param>
+    /// <returns>The coordinates of the empty node, or null if no node.</returns>
+    private Tuple<int, int> GetCoordinatesOfEmptyNodeInWorld(LevelWorld world, bool mustBeAdjacentToNonEmptyNode = false)
+    {
+        for (int rr = 0; rr < world.ChildNodes.GetLength(0); rr++)
+        {
+            for (int cc = 0; cc < world.ChildNodes.GetLength(1); cc++)
+            {
+                LevelNode currNode = world.ChildNodes[rr, cc];
+                if (currNode == null)
+                {
+                    LevelNode adjacentNonEmptyNode = GetAdjacentNonEmptyNode(world, rr, cc);
+                    if (!mustBeAdjacentToNonEmptyNode || adjacentNonEmptyNode != null)
+                    {
+                        return new Tuple<int, int>(rr, cc);
+                    }
+                }
+            }
+        }
 
-    //---------------//
-    // Build Helpers //
-    //---------------//
+        return null;
+    }
+
+    /// <summary>
+    /// Returns a randomly selected non-empty node adjacent to the given node.
+    /// </summary>
+    /// <param name="world">The world whose node to return.</param>
+    /// <param name="node">The node whose adjacent node to return.</param>
+    /// <returns>The adjacent, non-empty node, or null if no node.</returns>
+    private LevelNode GetAdjacentNonEmptyNode(LevelWorld world, LevelNode node)
+    {
+        return GetAdjacentNonEmptyNode(world, node.WorldRow, node.WorldColumn);
+    }
+
+    /// <summary>
+    /// Returns a randomly selected non-empty node adjacent to the node with the given coordinates.
+    /// </summary>
+    /// <param name="world">The world whose node to return.</param>
+    /// <param name="rowOfNode">The row of the node whose adjacent node to return.</param>
+    /// <param name="colOfNode">The column of the node whose adjacent node to return.</param>
+    /// <returns>The adjacent, non-empty node, or null if no node.</returns>
+    private LevelNode GetAdjacentNonEmptyNode(LevelWorld world, int rowOfNode, int colOfNode)
+    {
+        List<Direction> directions = new List<Direction>()
+        {
+            Direction.UP,
+            Direction.RIGHT,
+            Direction.DOWN,
+            Direction.LEFT
+        };
+
+        List<LevelNode> adjacentNonEmptyNodes = new List<LevelNode>();
+
+        // Find all non-empty adjacent nodes
+        foreach (var dir in directions)
+        {
+            Tuple<int, int> coordinates = GetNewCoordinatesInDirection(rowOfNode, colOfNode, dir);
+            int newRow = coordinates.First;
+            int newCol = coordinates.Second;
+
+            if (AreCoordinatesInsideWorld(world, newRow, newCol) && world.ChildNodes[newRow, newCol] != null)
+            {
+                adjacentNonEmptyNodes.Add(world.ChildNodes[newRow, newCol]);
+            }
+        }
+
+        // Check if we have no adjacent nodes
+        if (adjacentNonEmptyNodes.Count == 0)
+        {
+            return null;
+        }
+
+        // If we do, then return one at random
+        int index = UnityEngine.Random.Range(0, adjacentNonEmptyNodes.Count);
+        return adjacentNonEmptyNodes[index];
+    }
 
     /// <summary>
     /// Returns a list of the possible directions the given path could continue in.
@@ -376,16 +486,17 @@ public class LevelBuilder : MonoBehaviour
     }
 
     /// <summary>
-    /// Adds a new node to the world given the previous node, the direction to the new node, and parent path.
+    /// Continues the given path from the given node in the given direction.
     /// </summary>
-    /// <param name="previousNode">The node that connects to the new node; often the previous node in the path.</param>
-    /// <param name="parentPathOfNewNode">The parent path of the new node.</param>
-    /// <param name="directionToNewNode">The direction from the previous node to the new node.</param>
-    /// <exception cref="InvalidOperationException">Thrown if the new node's coordinates would be outside the world or if there is already a node at these coordinates.</exception>
-    /// <returns>The newly created node.</returns>
-    private LevelNode AddNodeToWorld(LevelNode previousNode, LevelPath parentPathOfNewNode, Direction directionToNewNode)
+    /// <param name="path">The path to continue.</param>
+    /// <param name="previousNode">The previous node that connects to the new node or join. Typically, this will be the given path's tail node.</param>
+    /// <param name="directionToContinue">The direction to continue the path in from the previous node.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the new node's coordinates would be outside the world.</exception>
+    /// <returns>True if the path can continue after this step; false otherwise.</returns>
+    private bool ProcessPathContinuation(LevelPath path, LevelNode previousNode, Direction directionToContinue)
     {
-        Tuple<int, int> newNodeCoords = GetNewCoordinatesInDirection(previousNode, directionToNewNode);
+        Tuple<int, int> newNodeCoords = GetNewCoordinatesInDirection(previousNode, directionToContinue);
+        bool pathContinuesNextIteration = false;
 
         // Verify that the new coordinates are inside the world
         if (!AreCoordinatesInsideWorld(previousNode.ParentWorld, newNodeCoords.First, newNodeCoords.Second))
@@ -394,41 +505,20 @@ public class LevelBuilder : MonoBehaviour
                 "Cannot add new node at the given direction from the given node. New node would have coordinates ({0}, {1}), which are outside the world.", newNodeCoords.First, newNodeCoords.Second));
         }
 
-        // Verify that there is no node at these coordinates already
-        if (parentPathOfNewNode.ParentWorld.ChildNodes[newNodeCoords.First, newNodeCoords.Second] != null)
+        // If there's no node at these coordinates, create a new node
+        LevelNode nodeAtCoordinates = path.ParentWorld.ChildNodes[newNodeCoords.First, newNodeCoords.Second];
+        if (nodeAtCoordinates == null)
         {
-            throw new InvalidOperationException(string.Format(
-                "Cannot add new node at location ({0}, {1}); location already has a node.", newNodeCoords.First, newNodeCoords.Second));
+            nodeAtCoordinates = new LevelNode(path, newNodeCoords.First, newNodeCoords.Second);
+
+            // Since we added a new node (and didn't join paths), this path continues
+            pathContinuesNextIteration = true;
         }
 
-        // Create the new node
-        LevelNode newNode = new LevelNode(parentPathOfNewNode, newNodeCoords.First, newNodeCoords.Second);
+        // Join the nodes
+        previousNode.UpdateOpenSideStatus(directionToContinue, true);
+        nodeAtCoordinates.UpdateOpenSideStatus(GetOppositeDirection(directionToContinue), true);
 
-        // Update the open side statuses
-        previousNode.UpdateOpenSideStatus(directionToNewNode, true);
-        newNode.UpdateOpenSideStatus(GetOppositeDirection(directionToNewNode), true);
-
-        return newNode;
-    }
-
-    /// <summary>
-    /// Joins the two given nodes. Nodes must be adjacent.
-    /// </summary>
-    /// <param name="firstNode">The first node to join.</param>
-    /// <param name="secondNode">The second node to join.</param>
-    /// <exception cref="InvalidOperationException">Thrown if the two nodes are not adjacent.</exception>
-    private void JoinNodes(LevelNode firstNode, LevelNode secondNode)
-    {
-        Direction dirToSecondNode = GetDirectionToCoordinates(firstNode.WorldRow, firstNode.WorldColumn, secondNode.WorldRow, secondNode.WorldColumn);
-
-        // Verify that we found a direction
-        if (dirToSecondNode == Direction.NONE)
-        {
-            throw new InvalidOperationException(string.Format(
-                "Cannot join nodes at locations ({0}, {1}) and ({2}, {3}); nodes are not adjacent.", firstNode.WorldRow, firstNode.WorldColumn, secondNode.WorldRow, secondNode.WorldColumn));
-        }
-
-        firstNode.UpdateOpenSideStatus(dirToSecondNode, true);
-        secondNode.UpdateOpenSideStatus(GetOppositeDirection(dirToSecondNode), true);
+        return pathContinuesNextIteration;
     }
 }
